@@ -1,0 +1,48 @@
+┌─────────────────────────────────────────────────────────┐
+│                  IoT Power Monitoring System            │
+└─────────────────────────────────────────────────────────┘
+
+Layer 1: HARDWARE (树莓派端)
+┌──────────────────────────────────────────────────────┐
+│ Raspberry Pi 4 (4GB)                                 │
+│  ├─ ACS712 Current Sensor (GPIO17)                   │
+│  ├─ DHT22 Temperature/Humidity Sensor (GPIO27)       │
+│  └─ Power Supply Monitoring (GPIO23)                 │
+└──────────┬───────────────────────────────────────────┘
+           │
+Layer 2: DATA COLLECTION (Python脚本)
+┌──────────────────────────────────────────────────────┐
+│ sensor-reader.py                                     │
+│  ├─ Read GPIO inputs every 5 seconds                 │
+│  ├─ Calculate current/voltage/power                  │
+│  ├─ Format as JSON: {timestamp, current, voltage}   │
+│  └─ Send to Claude API                               │
+└──────────┬───────────────────────────────────────────┘
+           │
+Layer 3: AI ANALYSIS (Claude API)
+┌──────────────────────────────────────────────────────┐
+│ Claude Vision + Analysis                             │
+│  ├─ Analyze power consumption patterns               │
+│  ├─ Detect anomalies (异常用电)                      │
+│  ├─ Provide recommendations                          │
+│  └─ Return insights as JSON                          │
+└──────────┬───────────────────────────────────────────┘
+           │
+Layer 4: DATA PERSISTENCE (Supabase)
+┌──────────────────────────────────────────────────────┐
+│ PostgreSQL Database (Supabase)                       │
+│  ├─ power_readings table                             │
+│  ├─ anomalies table                                  │
+│  └─ user_preferences table                           │
+└──────────┬───────────────────────────────────────────┘
+           │
+Layer 5: VISUALIZATION (Next.js Dashboard)
+┌──────────────────────────────────────────────────────┐
+│ Next.js + React + Tailwind                           │
+│  ├─ Real-time power consumption chart                │
+│  ├─ Daily/Weekly/Monthly reports                     │
+│  ├─ Anomaly alerts                                   │
+│  └─ Recommendations panel                            │
+└──────────────────────────────────────────────────────┘
+
+Timeline: Raw Data → Analysis → Storage → Visualization
