@@ -1,27 +1,30 @@
-import time
-import board
 import adafruit_dht
+import board
+import time
 
-# D4 represents GPIO 4. If you connect it to another pin, please change the number accordingly.
-# Use adafruit_dht.DHT11 for DHT11 sensor; if you use a white DHT22 sensor, change it to DHT22.
-dhtDevice = adafruit_dht.DHT11(board.D4)
+# GPIO4 board.D4（Physical Pin 7）
+dht_device = adafruit_dht.DHT11(board.D4)
 
-while True:
+def read_dht11():
     try:
-        # Read temperature and humidity values
-        temperature_c = dhtDevice.temperature
-        humidity = dhtDevice.humidity
-
-        print(f"Temperature: {temperature_c:.1f}°C    Humidity: {humidity}%")
-
+        temperature = dht_device.temperature
+        humidity = dht_device.humidity
+        
+        if humidity is not None and temperature is not None:
+            print(f"Temperature: {temperature:.1f}°C  Humidity: {humidity:.1f}%")
+            return temperature, humidity
+        else:
+            print("failed to retrieve data from DHT11 sensor...")
+            return None, None
+            
     except RuntimeError as error:
-        # DHT sensors are quite unstable and reading errors happen frequently.
-        # We just catch the error and continue the process.
-        print(f"Reading failed: {error.args[0]}")
-        time.sleep(2.0)
-        continue
+        print(f"Error reading DHT11 sensor: {error.args[0]}")
+        return None, None
     except Exception as error:
-        dhtDevice.exit()
-        raise error
+        print(f"Unexpected error: {error}")
+        return None, None
 
-    time.sleep(2.0)
+if __name__ == "__main__":
+    while True:
+        read_dht11()
+        time.sleep(2)   # DHT11 every 2 sec read once
