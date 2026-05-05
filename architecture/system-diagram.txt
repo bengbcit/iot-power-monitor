@@ -5,9 +5,9 @@
 Layer 1: HARDWARE (树莓派端)
 ┌──────────────────────────────────────────────────────┐
 │ Raspberry Pi 4 (4GB)                                 │
-│  ├─ ACS712 Current Sensor (GPIO17)                   │
-│  ├─ DHT22 Temperature/Humidity Sensor (GPIO27)       │
-│  └─ Power Supply Monitoring (GPIO23)                 │
+│  ├─ ACS712 Current Sensor (CE0)                      │
+│  ├─ DHT11 Temperature/Humidity Sensor (GPIO )        │
+│  └─ Power Supply Monitoring (GPIO )                  │
 └──────────┬───────────────────────────────────────────┘
            │
 Layer 2: DATA COLLECTION (Python脚本)
@@ -15,7 +15,7 @@ Layer 2: DATA COLLECTION (Python脚本)
 │ sensor-reader.py                                     │
 │  ├─ Read GPIO inputs every 5 seconds                 │
 │  ├─ Calculate current/voltage/power                  │
-│  ├─ Format as JSON: {timestamp, current, voltage}   │
+│  ├─ Format as JSON: {timestamp, current, voltage}    │
 │  └─ Send to Claude API                               │
 └──────────┬───────────────────────────────────────────┘
            │
@@ -23,7 +23,7 @@ Layer 3: AI ANALYSIS (Claude API)
 ┌──────────────────────────────────────────────────────┐
 │ Claude Vision + Analysis                             │
 │  ├─ Analyze power consumption patterns               │
-│  ├─ Detect anomalies (异常用电)                      │
+│  ├─ Detect anomalies (异常用电)                       │
 │  ├─ Provide recommendations                          │
 │  └─ Return insights as JSON                          │
 └──────────┬───────────────────────────────────────────┘

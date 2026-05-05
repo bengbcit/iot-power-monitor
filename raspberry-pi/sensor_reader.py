@@ -60,7 +60,6 @@ def init_mcp3008():
 def read_adc_raw(channel, samples=SAMPLES_PER_READ):
     """
     Read raw ADC value with multiple sampling for stability.
-    
     Returns:
         float: Average raw ADC value (0 ~ 65535)
     """
@@ -79,7 +78,11 @@ def read_adc_raw(channel, samples=SAMPLES_PER_READ):
 
 
 def adc_to_voltage(adc_value):
-    """Convert ADC raw value to voltage (0 - ACS712_VCC)"""
+    """
+    Convert ADC raw value to voltage (0 - ACS712_VCC)
+    Returns:
+        float: Voltage in volts (0 ~ ACS712_VCC), or None if input is None
+    """
     if adc_value is None:
         return None
     # MCP3008 is 10-bit, but library returns 16-bit scaled value
@@ -90,8 +93,9 @@ def adc_to_voltage(adc_value):
 def voltage_to_current(voltage):
     """
     Convert sensor output voltage to current using ACS712 formula.
-    
     Formula: I (A) = (V_out - V_offset) / Sensitivity
+    Returns:
+        float: Current in amps, or None if input is None
     """
     if voltage is None:
         return None
@@ -103,7 +107,11 @@ def voltage_to_current(voltage):
 
 
 def calculate_power(current_a, load_voltage=LOAD_VOLTAGE):
-    """Calculate power in Watts: P = I × V"""
+    """
+    Calculate power in Watts: P = I × V
+    Returns:
+        float: Power in watts, or None if input is None
+    """
     if current_a is None:
         return None
     power_w = abs(current_a) * load_voltage
@@ -113,6 +121,8 @@ def calculate_power(current_a, load_voltage=LOAD_VOLTAGE):
 def read_power_data(channel):
     """
     Complete data acquisition pipeline: ADC → Voltage → Current → Power
+    Returns:
+        dict: Power data with timestamp and measurements, or None if failed
     """
     adc_value = read_adc_raw(channel)
     if adc_value is None:
