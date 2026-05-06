@@ -7,3 +7,12 @@ overcurrent_log.txt
 
 # calibration files
 calibration.json
+
+# environment files
+.env
+
+# API Model Check
+Google_Ck.py
+NVIDIA_Ck.py
+
+

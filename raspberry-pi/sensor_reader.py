@@ -1,20 +1,22 @@
 """
-main.py - ACS712 Power Monitor with Calibration and Overcurrent Protection
-==========================================================================
+sensor_reader.py - ACS712 Power Monitor with Calibration, Overcurrent Protection, and LLM Analysis
+==================================================================================================
 
 This is the main program that integrates:
 - Calibration module (for zero-point accuracy)
 - Overcurrent protection module (for safety)
+- LLM analysis (for intelligent power consumption insights)
 
 Usage:
-    python main.py              # Normal operation with calibration & protection
-    python main.py --calibrate  # Run calibration only
-    python main.py --test       # Test mode (faster readings)
+    python sensor_reader.py              # Normal operation with calibration & protection
+    python sensor_reader.py --calibrate  # Run calibration only
+    python sensor_reader.py --test       # Test mode (faster readings)
+    python sensor_reader.py --no-llm     # Disable LLM analysis (faster, no API calls)
 """
 
-import board
-import busio
-import digitalio
+import board  
+import busio  
+import digitalio  
 import time
 import sys
 from datetime import datetime
@@ -23,7 +25,15 @@ from datetime import datetime
 from ACS712_Calibration import Calibration
 from ACS712_Overcurrent import OvercurrentProtection, OvercurrentError
 
-
+# Import LLM analyzer (new)
+try:
+    from analyzer import PowerAnalyzer
+    LLM_AVAILABLE = True
+except ImportError:
+    LLM_AVAILABLE = False
+    print("[WARN] analyzer.py not found. LLM analysis disabled.")
+    
+    
 # ========================= CONFIGURATION =========================
 
 # ACS712 Sensor Parameters (ACS712-20A)
@@ -43,6 +53,10 @@ READ_INTERVAL_TEST = 2         # Seconds between readings (test mode)
 WARNING_THRESHOLD = 15.0       # Warning at 15A (75% of 20A range)
 CRITICAL_THRESHOLD = 18.0      # Critical at 18A (90% of 20A range)
 AUTO_SHUTDOWN = True           # Automatically trigger emergency stop
+
+# LLM Configuration (new)
+LLM_PROVIDER = "groq"          # Options: "groq", "deepseek", "google"
+ENABLE_LLM = True              # Default enabled
 
 
 # ========================= HARDWARE INITIALIZATION =========================
@@ -198,28 +212,62 @@ def format_output(data, show_adc=True):
             alert_symbol = " 🔴 EMERGENCY STOPPED 🔴"
     
     output = f"""
-{'='*50}
-📊 ACS712 Power Monitor{alert_symbol}
-Time     : {data['timestamp']}
-"""
+            {'='*50}
+            📊 ACS712 Power Monitor{alert_symbol}
+            Time     : {data['timestamp']}
+            """
     
     if show_adc:
         output += f"ADC Value: {data['adc_value']:>8.1f} / 65535\n"
     
     output += f"""Voltage  : {data['voltage']:>6.3f} V
-Current  : {data['current_a']:>7.4f} A
-Power    : {data['power_w']:>7.3f} W
-Location : {data['location']}
-{'='*50}
-"""
+            Current  : {data['current_a']:>7.4f} A
+            Power    : {data['power_w']:>7.3f} W
+            Location : {data['location']}
+            {'='*50}
+            """
     return output
 
+def format_llm_output(analysis):
+    """
+    Format LLM analysis output for display.
+    
+    Args:
+        analysis (dict): Analysis result from PowerAnalyzer
+        
+    Returns:
+        str: Formatted output string
+    """
+    if not analysis:
+        return "   [LLM] Analysis unavailable"
+    
+    status_icons = {
+        "normal": "✅",
+        "warning": "⚠️",
+        "alert": "🚨"
+    }
+    icon = status_icons.get(analysis.get("status", "normal"), "📊")
+    
+    confidence = analysis.get("confidence", 0)
+    confidence_bar = "█" * int(confidence * 20) + "░" * (20 - int(confidence * 20))
+    
+    return f"""
+            ┌─────────────────────────────────────────────────────────────┐
+            │ {icon} LLM Power Analysis                                   |
+            ├─────────────────────────────────────────────────────────────|
+            │ Status: {analysis.get('status', 'N/A').upper():<10}         |
+            | Confidence: [{confidence_bar}] {int(confidence*100)}% │     |
+            ├─────────────────────────────────────────────────────────────|
+            │ 📝 {analysis.get('analysis', 'N/A')}                        
+            ├─────────────────────────────────────────────────────────────|
+            │ 💡 {analysis.get('recommendation', 'N/A')}                                
+            └─────────────────────────────────────────────────────────────┘"""
 
 # ========================= MAIN READING FUNCTION =========================
 
 def read_power_data(channel, calibration_zero_voltage=None, protection=None):
     """
-    Complete data acquisition pipeline: ADC → Voltage → Current → Power.
+    : ADC → Voltage → Current → Power.
     Includes optional calibration and overcurrent protection.
     
     Args:
@@ -284,13 +332,13 @@ def run_calibration_routine(channel):
     print("CALIBRATION ROUTINE")
     print("="*60)
     print("""
-This routine will measure the zero-point voltage of your ACS712 sensor.
+        This routine will measure the zero-point voltage of your ACS712 sensor.
 
-IMPORTANT:
-1. DISCONNECT any load from the ACS712 (no current flowing)
-2. Make sure the sensor is powered (VCC and GND connected)
-3. Wait for the measurement to complete
-""")
+        IMPORTANT:
+        1. DISCONNECT any load from the ACS712 (no current flowing)
+        2. Make sure the sensor is powered (VCC and GND connected)
+        3. Wait for the measurement to complete
+        """)
     
     input("Press ENTER to start calibration...")
     
@@ -310,14 +358,15 @@ IMPORTANT:
 
 # ========================= MAIN LOOP =========================
 
-def main_loop(test_mode=False, enable_calibration=True, enable_protection=True):
+def main_loop(test_mode=False, enable_calibration=True, enable_protection=True, enable_llm=True):
     """
-    Main monitoring loop with optional calibration and protection.
+    Main monitoring loop with optional calibration, protection, and LLM analysis.
     
     Args:
         test_mode (bool): Use faster interval for testing
         enable_calibration (bool): Load and apply calibration
         enable_protection (bool): Enable overcurrent protection
+        enable_llm (bool): Enable LLM analysis (requires API key and analyzer.py)
     """
     # Step 1: Initialize hardware
     print("\n🔧 Initializing hardware...")
@@ -336,7 +385,7 @@ def main_loop(test_mode=False, enable_calibration=True, enable_protection=True):
             print(f"✓ Using calibrated zero voltage: {calibration_zero_voltage:.4f} V")
         else:
             print("ℹ️  No calibration found. Using theoretical value (2.500V)")
-            print("   Run 'python main.py --calibrate' to improve accuracy.")
+            print("   Run 'python sensor_reader.py --calibrate' to improve accuracy.")
     
     # Step 3: Initialize overcurrent protection (if enabled)
     protection = None
@@ -351,22 +400,36 @@ def main_loop(test_mode=False, enable_calibration=True, enable_protection=True):
         print(f"   Warning : {protection.warning} A")
         print(f"   Critical: {protection.critical} A")
     
-    # Step 4: Set interval
+    # Step 4: Initialize LLM analyzer (if enabled)
+    llm_analyzer = None
+    if enable_llm and LLM_AVAILABLE:
+        print("\n🤖 Initializing LLM analyzer...")
+        try:
+            llm_analyzer = PowerAnalyzer(provider=LLM_PROVIDER)
+            print(f"✓ LLM analysis enabled (provider: {LLM_PROVIDER})")
+        except Exception as e:
+            print(f"⚠️ LLM initialization failed: {e}")
+            print("   Continuing without LLM analysis...")
+    elif enable_llm and not LLM_AVAILABLE:
+        print("⚠️ analyzer.py not found. LLM analysis disabled.")
+    
+    # Step 5: Set interval
     interval = READ_INTERVAL_TEST if test_mode else READ_INTERVAL_NORMAL
     
-    # Step 5: Display startup banner
+    # Step 6: Display startup banner
     print(f"""
-╔══════════════════════════════════════════════════════════════╗
-║                 ACS712 IoT Power Monitor                     ║
-╠══════════════════════════════════════════════════════════════╣
-║  Mode        : {'TEST' if test_mode else 'PRODUCTION'}                                 ║
-║  Interval    : {interval} seconds                                            ║
-║  Calibration : {'ENABLED' if calibration_zero_voltage else 'DISABLED'} ({'loaded' if calibration_zero_voltage else 'theoretical'})    ║
-║  Protection  : {'ENABLED' if enable_protection else 'DISABLED'}                                   ║
-╚══════════════════════════════════════════════════════════════╝
-""")
+        ╔══════════════════════════════════════════════════════════════╗
+        ║                 ACS712 IoT Power Monitor                     ║
+        ╠══════════════════════════════════════════════════════════════╣
+        ║  Mode        : {'TEST' if test_mode else 'PRODUCTION'}                                          ║
+        ║  Interval    : {interval} seconds                                     ║
+        ║  Calibration : {'ENABLED' if calibration_zero_voltage else 'DISABLED'} ({'loaded' if calibration_zero_voltage else 'theoretical'})                              ║
+        ║  Protection  : {'ENABLED' if enable_protection else 'DISABLED'}                                       ║
+        ║  LLM Analysis: {'ENABLED' if llm_analyzer else 'DISABLED'}                                       ║
+        ╚══════════════════════════════════════════════════════════════╝
+        """)
     
-    # Step 6: Main monitoring loop
+    # Step 7: Main monitoring loop
     loop_count = 0
     
     try:
@@ -380,11 +443,24 @@ def main_loop(test_mode=False, enable_calibration=True, enable_protection=True):
             if power_data:
                 print(format_output(power_data))
                 
+                # LLM Analysis (new feature)
+                if llm_analyzer and power_data.get('current_a') is not None:
+                    print("\n🤖 Requesting LLM analysis...")
+                    try:
+                        analysis = llm_analyzer.analyze_power_data(
+                            current_a=power_data['current_a'],
+                            power_w=power_data['power_w'],
+                            voltage_v=LOAD_VOLTAGE
+                        )
+                        print(format_llm_output(analysis))
+                    except Exception as e:
+                        print(f"   [LLM Error] {e}")
+                
                 # Show protection statistics every 10 readings
                 if protection and loop_count % 10 == 0:
                     stats = protection.get_stats()
                     if stats['warning_count'] > 0 or stats['critical_count'] > 0:
-                        print(f"📊 Protection Stats: {stats['warning_count']} warnings, "
+                        print(f"\n📊 Protection Stats: {stats['warning_count']} warnings, "
                               f"{stats['critical_count']} critical events")
             else:
                 print("✗ Data collection failed, retrying...")
@@ -404,36 +480,35 @@ def main_loop(test_mode=False, enable_calibration=True, enable_protection=True):
         
     except Exception as e:
         print(f"\n✗ Critical error: {e}")
-
-
 # ========================= COMMAND LINE INTERFACE =========================
 
 def print_usage():
     """Print usage instructions"""
     print("""
-ACS712 Power Monitor - Usage:
-==============================
+    ACS712 Power Monitor - Usage:
+    ==============================
 
-Commands:
-    python main.py              Normal operation (with calibration & protection)
-    python main.py --test       Test mode (faster readings, 2 second interval)
-    python main.py --calibrate  Run calibration only
-    python main.py --no-protection  Disable overcurrent protection
-    python main.py --help       Show this help message
+    Commands:
+        python sensor_reader.py                  Normal operation (with calibration & protection & LLM)
+        python sensor_reader.py --test           Test mode (faster readings, 2 second interval)
+        python sensor_reader.py --calibrate      Run calibration only
+        python sensor_reader.py --no-protection  Disable overcurrent protection
+        python sensor_reader.py --no-llm         Disable LLM analysis (faster, no API calls)
+        python sensor_reader.py --help           Show this help message
 
-Examples:
-    # First time setup - calibrate your sensor
-    python main.py --calibrate
-    
-    # Normal monitoring
-    python main.py
-    
-    # Quick testing
-    python main.py --test
-    
-    # Monitoring without protection (for testing)
-    python main.py --no-protection
-""")
+    Examples:
+        # First time setup - calibrate your sensor
+        python sensor_reader.py --calibrate
+        
+        # Normal monitoring with LLM analysis
+        python sensor_reader.py
+        
+        # Quick testing without LLM (faster)
+        python sensor_reader.py --test --no-llm
+        
+        # Monitoring without protection (for testing)
+        python sensor_reader.py --no-protection
+    """)
 
 
 # ========================= ENTRY POINT =========================
@@ -460,9 +535,11 @@ if __name__ == "__main__":
     # Normal operation mode
     test_mode = "--test" in args
     enable_protection = "--no-protection" not in args
+    enable_llm = "--no-llm" not in args
     
     main_loop(
         test_mode=test_mode,
         enable_calibration=True,  # Always try to load calibration
-        enable_protection=enable_protection
+        enable_protection=enable_protection,
+        enable_llm=enable_llm
     )
