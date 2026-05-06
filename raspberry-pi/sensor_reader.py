@@ -27,7 +27,7 @@ from ACS712_Overcurrent import OvercurrentProtection, OvercurrentError
 # ========================= CONFIGURATION =========================
 
 # ACS712 Sensor Parameters (ACS712-20A)
-ACS712_VCC = 5.0               # Supply voltage to ACS712 (Volts)
+ACS712_VCC = 5.3               # Supply voltage to ACS712 (Volts)
 ACS712_SENSITIVITY = 0.100     # 100 mV/A for 20A version (Volts per Ampere)
 ACS712_THEORETICAL_OFFSET = 0.5  # 50% offset (2.5V when no current)
 
@@ -151,7 +151,7 @@ def voltage_to_current(voltage, calibration_zero_voltage=None):
     
     # Calculate current
     current_a = (voltage - offset_voltage) / ACS712_SENSITIVITY
-    return current_a
+    return abs(current_a)
 
 
 def calculate_power(current_a, load_voltage=LOAD_VOLTAGE):
@@ -442,6 +442,7 @@ if __name__ == "__main__":
     # Parse command line arguments
     args = sys.argv[1:]
     
+    # Add help command 
     if "--help" in args or "-h" in args:
         print_usage()
         sys.exit(0)

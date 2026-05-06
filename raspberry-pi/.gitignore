@@ -1,2 +1,9 @@
 # cached files
 __pycache__/
+
+# log files
+*.log
+overcurrent_log.txt
+
+# calibration files
+calibration.json
