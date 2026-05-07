@@ -1,5 +1,6 @@
 # Core dependencies (Raspberry Pi)
 Adafruit-Blinka>=8.0.0
+adafruit-circuitpython-busio>=5.0.0
 adafruit-circuitpython-mcp3008>=1.0.0
 
 # Data upload to cloud

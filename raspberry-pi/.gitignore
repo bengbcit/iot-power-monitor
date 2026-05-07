@@ -15,4 +15,6 @@ calibration.json
 Google_Ck.py
 NVIDIA_Ck.py
 
+# Test database query files
+query_test.py
 
