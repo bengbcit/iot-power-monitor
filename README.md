@@ -56,6 +56,10 @@ Raspberry Pi + ACS712 Current Sensor + MCP3008 ADC + Claude API intelligent powe
 - ✅ Claude AI anomaly detection
 - ✅ Persistent data storage
 - ✅ Multi-language support
+- ✅ Supabase PostgreSQL for data persistence
+- ✅ Automatic storage of sensor readings
+- ✅ AI analysis results saved to database
+- ✅ Alert history tracking
 
 ---
 
@@ -153,7 +157,8 @@ File Structure / ファイル構成
     ├── test_calibration.py  # Calibration test script
     ├── test_sensor.py       # Sensor reading test ACS712 script
     └── README.md            # This file\
-    ├── analyzer.py          # Claude API analysis module
+    ├── analyzer.py          # Deepseek/NVIDIA/etc API analysis module
+    ├── database.py          # Supabase database module
     architecture/
     ├── requirements.txt     # Python dependencies
 
@@ -187,7 +192,121 @@ Troubleshooting / トラブルシューティング
         MCP3008 GND connected to Raspberry Pi GND
         ACS712 VOUT connected to MCP3008 CH0
 
-```
+    Issue 6: Permission denied for table
+    Cause: RLS (Row Level Security) blocking access
+    Solution: Grant permissions in Supabase SQL Editor
+
+        GRANT SELECT, INSERT ON power_readings TO anon;
+        GRANT SELECT, INSERT ON power_analyses TO anon;
+        GRANT SELECT, INSERT ON power_alerts TO anon;
+
+    Issue 7: Environment variables not loading
+    Cause: .env file not found or missing load_dotenv()
+    Solution:
+        Ensure .env is in the same directory as database.py
+        Add to Python file:
+            from dotenv import load_dotenv
+            load_dotenv()
+    ```bash
+    Issue 8: Invalid timestamp syntax
+    Cause: PostgreSQL incompatible string format
+    Solution: Use datetime object instead
+        from datetime import timedelta
+        cutoff = datetime.now() - timedelta(hours=hours)
+        .gte("created_at", cutoff.isoformat())
+    ```
+    ## AI Analysis / AI分析
+
+    ### Supported Providers
+    | Provider | File | Status |
+    |----------|------|--------|
+    | Claude (Anthropic) | `analyzer.py` | ✅ Working |
+    | Google AI | `Google_Ck.py` | ✅ Working |
+    | NVIDIA | `NVIDIA_Ck.py` | ✅ Working |
+
+    ### Usage
+    from analyzer import LLMClient
+
+    # Initialize Claude client
+    client = LLMClient(provider="claude")
+
+    # Analyze power data
+    analysis = client.analyze_power_data(
+        current_a=12.9,
+        power_w=64.5,
+        device_location="USB Device Test"
+    )
+
+    print(f"Status: {analysis['status']}")
+    print(f"Recommendation: {analysis['recommendation']}")
+
+    ## Database Setup / データベース設定
+
+    ### 1. Create Supabase Project
+
+    1. Visit [supabase.com](https://supabase.com) and sign up
+    2. Click "New project"
+    3. Set project name: `iot-power-monitor`
+    4. Save your database password
+    5. Select region (Tokyo or Singapore recommended)
+
+    ### 2. Create Tables
+
+    Run the following SQL in Supabase SQL Editor:
+
+    ```sql
+    -- Table 1: power_readings
+    CREATE TABLE IF NOT EXISTS power_readings (
+        id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()),
+        adc_value FLOAT NOT NULL,
+        voltage FLOAT NOT NULL,
+        current_a FLOAT NOT NULL,
+        power_w FLOAT NOT NULL,
+        device_location TEXT DEFAULT 'USB Device Test',
+        notes TEXT
+    );
+
+    -- Table 2: power_analyses
+    CREATE TABLE IF NOT EXISTS power_analyses (
+        id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()),
+        power_reading_id BIGINT REFERENCES power_readings(id) ON DELETE CASCADE,
+        status TEXT NOT NULL,
+        analysis TEXT,
+        recommendation TEXT,
+        confidence FLOAT,
+        is_abnormal BOOLEAN DEFAULT FALSE
+    );
+
+    -- Table 3: power_alerts
+    CREATE TABLE IF NOT EXISTS power_alerts (
+        id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()),
+        power_reading_id BIGINT REFERENCES power_readings(id) ON DELETE CASCADE,
+        alert_type TEXT NOT NULL,
+        message TEXT,
+        is_resolved BOOLEAN DEFAULT FALSE,
+        resolved_at TIMESTAMP WITH TIME ZONE
+    );
+
+    -- Grant permissions
+    GRANT SELECT, INSERT ON power_readings TO anon;
+    GRANT SELECT, INSERT ON power_analyses TO anon;
+    GRANT SELECT, INSERT ON power_alerts TO anon;
+
+
+    ### 3. Configure Environment Variables
+    Create .env file in raspberry-pi/ directory:
+
+    .env
+    SUPABASE_URL=https://your-project-id.supabase.co
+    SUPABASE_KEY=your-anon-public-key   
+
+    ### 4. Test Database Connection
+    python database.py
+
+    ```
 
 
 
@@ -249,8 +368,8 @@ User Browser (Charts & Real-time Data) / ユーザーブラウザ（チャート
 ## 📋 Core Features / コア機能
 
 - [x] Raspberry Pi reads power sensor data / ラズベリーパイで電力センサーデータを読み取り
-- [ ] Real-time analysis via Claude API / Claude APIによるリアルタイム分析
-- [ ] Store to Supabase database / Supabaseデータベースに保存
+- [x] Real-time analysis via Claude API / Claude APIによるリアルタイム分析
+- [x] Store to Supabase database / Supabaseデータベースに保存
 - [ ] Display on Next.js dashboard / Next.jsダッシュボードで表示
 - [ ] Anomaly alert system / 異常警報システム
 
@@ -271,11 +390,13 @@ User Browser (Charts & Real-time Data) / ユーザーブラウザ（チャート
 
 ## 🚀 Development Progress / 開発進捗
 
-- [x] Week 1 (4/23-4/27): Architecture Design 
-- [x] Week 2 (4/28-5/4): Raspberry Pi OS Installation + Python Sensor Reading / Raspberry Pi OSインストール + Pythonセンサー読み取り
-- [x] Week 3-4: Claude API Integration / Claude API統合
-- [ ] Week 5-6: Supabase Database
-- [ ] Week 7-8: Next.js Dashboard
+- [x] Week 1 (4/23-4/27): Architecture Design
+- [x] Week 2 (4/28-5/4): Raspberry Pi OS + Python Sensor Reading
+- [x] Week 2 (5/5-5/6): Calibration + Overcurrent Protection
+- [x] Week 3 (5/7): Claude API Integration 
+- [x] Week 3 (5/7): Supabase Database Integration  ← NEW
+- [ ] Week 3: Next.js Dashboard
+- [ ] Week 4: Complete Alert System
 
 📄 License
 MIT License
