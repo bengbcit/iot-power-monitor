@@ -44,7 +44,7 @@ except ImportError:
 # ========================= CONFIGURATION =========================
 
 # ACS712 Sensor Parameters (ACS712-20A)
-ACS712_VCC = 5.3               # Supply voltage to ACS712 (Volts)
+ACS712_VCC = 5.07               # Supply voltage to ACS712 (Volts)
 ACS712_SENSITIVITY = 0.100     # 100 mV/A for 20A version (Volts per Ampere)
 ACS712_THEORETICAL_OFFSET = 0.5  # 50% offset (2.5V when no current)
 
