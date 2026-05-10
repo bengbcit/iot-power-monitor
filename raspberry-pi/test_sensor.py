@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """fast way to test sensor reading functions without waiting for the main loop"""
 
-from sensor_reader import (
+from main import (
     init_mcp3008, read_adc_raw, adc_to_voltage,
     voltage_to_current, calculate_power, read_power_data
 )

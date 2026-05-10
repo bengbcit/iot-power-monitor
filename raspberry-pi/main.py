@@ -1,5 +1,5 @@
 """
-sensor_reader.py - ACS712 Power Monitor with Calibration, Overcurrent Protection, and LLM Analysis
+main.py - ACS712 Power Monitor with Calibration, Overcurrent Protection, and LLM Analysis
 ==================================================================================================
 
 This is the main program that integrates:
@@ -8,10 +8,10 @@ This is the main program that integrates:
 - LLM analysis (for intelligent power consumption insights)
 
 Usage:
-    python sensor_reader.py              # Normal operation with calibration & protection
-    python sensor_reader.py --calibrate  # Run calibration only
-    python sensor_reader.py --test       # Test mode (faster readings)
-    python sensor_reader.py --no-llm     # Disable LLM analysis (faster, no API calls)
+    python main.py              # Normal operation with calibration & protection
+    python main.py --calibrate  # Run calibration only
+    python main.py --test       # Test mode (faster readings)
+    python main.py --no-llm     # Disable LLM analysis (faster, no API calls)
 """
 
 import board  
@@ -19,9 +19,16 @@ import busio
 import digitalio  
 import time
 import sys
+# Import MCP3008 library (Adafruit)
+import adafruit_mcp3xxx.mcp3008 as MCP
+
+# For date and time handling
 from datetime import datetime
 
-# Import custom modules
+# Import database module (for data saving)
+from database import IoTDatabase
+
+# Import custom modules for calibration and protection
 from ACS712_Calibration import Calibration
 from ACS712_Overcurrent import OvercurrentProtection, OvercurrentError
 
@@ -75,8 +82,7 @@ def init_mcp3008():
         # Chip select pin
         cs = digitalio.DigitalInOut(board.D8)
         
-        # Import and initialize MCP3008
-        import adafruit_mcp3xxx.mcp3008 as MCP
+        # initialize MCP3008
         from adafruit_mcp3xxx.analog_in import AnalogIn
         
         # Create MCP3008 object and channel 0
@@ -368,14 +374,23 @@ def main_loop(test_mode=False, enable_calibration=True, enable_protection=True, 
         enable_protection (bool): Enable overcurrent protection
         enable_llm (bool): Enable LLM analysis (requires API key and analyzer.py)
     """
-    # Step 1: Initialize hardware
+    # step 1: initialize database connection and LLM analyzer before loop
+    db = None
+    try:
+        db = IoTDatabase()
+        print("✓ Supabase database connected")
+    except Exception as e:
+        print(f"⚠️ Database connection failed: {e}")
+        print("   Continuing without database save...")
+    
+    # Step 2: Initialize hardware
     print("\n🔧 Initializing hardware...")
     channel = init_mcp3008()
     if channel is None:
         print("✗ Failed to initialize MCP3008. Exiting.")
         return
     
-    # Step 2: Load calibration (if enabled)
+    # Step 3: Load calibration (if enabled)
     calibration_zero_voltage = None
     if enable_calibration:
         print("\n🔧 Loading calibration...")
@@ -385,9 +400,9 @@ def main_loop(test_mode=False, enable_calibration=True, enable_protection=True, 
             print(f"✓ Using calibrated zero voltage: {calibration_zero_voltage:.4f} V")
         else:
             print("ℹ️  No calibration found. Using theoretical value (2.500V)")
-            print("   Run 'python sensor_reader.py --calibrate' to improve accuracy.")
+            print("   Run 'python main.py --calibrate' to improve accuracy.")
     
-    # Step 3: Initialize overcurrent protection (if enabled)
+    # Step 4: Initialize overcurrent protection (if enabled)
     protection = None
     if enable_protection:
         print("\n🔧 Initializing overcurrent protection...")
@@ -400,7 +415,7 @@ def main_loop(test_mode=False, enable_calibration=True, enable_protection=True, 
         print(f"   Warning : {protection.warning} A")
         print(f"   Critical: {protection.critical} A")
     
-    # Step 4: Initialize LLM analyzer (if enabled)
+    # Step 5: Initialize LLM analyzer (if enabled)
     llm_analyzer = None
     if enable_llm and LLM_AVAILABLE:
         print("\n🤖 Initializing LLM analyzer...")
@@ -413,10 +428,10 @@ def main_loop(test_mode=False, enable_calibration=True, enable_protection=True, 
     elif enable_llm and not LLM_AVAILABLE:
         print("⚠️ analyzer.py not found. LLM analysis disabled.")
     
-    # Step 5: Set interval
+    # Step 6: Set interval
     interval = READ_INTERVAL_TEST if test_mode else READ_INTERVAL_NORMAL
     
-    # Step 6: Display startup banner
+    # Step 7: Display startup banner
     print(f"""
         ╔══════════════════════════════════════════════════════════════╗
         ║                 ACS712 IoT Power Monitor                     ║
@@ -429,7 +444,7 @@ def main_loop(test_mode=False, enable_calibration=True, enable_protection=True, 
         ╚══════════════════════════════════════════════════════════════╝
         """)
     
-    # Step 7: Main monitoring loop
+    # Step 8: Main monitoring loop
     loop_count = 0
     
     try:
@@ -443,7 +458,7 @@ def main_loop(test_mode=False, enable_calibration=True, enable_protection=True, 
             if power_data:
                 print(format_output(power_data))
                 
-                # LLM Analysis (new feature)
+                # LLM Analysis 
                 if llm_analyzer and power_data.get('current_a') is not None:
                     print("\n🤖 Requesting LLM analysis...")
                     try:
@@ -453,6 +468,26 @@ def main_loop(test_mode=False, enable_calibration=True, enable_protection=True, 
                             voltage_v=LOAD_VOLTAGE
                         )
                         print(format_llm_output(analysis))
+
+                        # ========== save to database ==========
+                        if db:
+                            power_id = db.save_power_reading(
+                                adc_value=power_data['adc_value'],
+                                voltage=power_data['voltage'],
+                                current_a=power_data['current_a'],
+                                power_w=power_data['power_w']
+                            )
+                            if power_id:
+                                db.save_analysis(
+                                    power_id=power_id,
+                                    status=analysis['status'],
+                                    analysis=analysis['analysis'],
+                                    recommendation=analysis['recommendation'],
+                                    confidence=analysis['confidence'],
+                                    is_abnormal=analysis.get('is_abnormal', False)
+                                )
+                        # =====================================
+                        
                     except Exception as e:
                         print(f"   [LLM Error] {e}")
                 
@@ -489,25 +524,25 @@ def print_usage():
     ==============================
 
     Commands:
-        python sensor_reader.py                  Normal operation (with calibration & protection & LLM)
-        python sensor_reader.py --test           Test mode (faster readings, 2 second interval)
-        python sensor_reader.py --calibrate      Run calibration only
-        python sensor_reader.py --no-protection  Disable overcurrent protection
-        python sensor_reader.py --no-llm         Disable LLM analysis (faster, no API calls)
-        python sensor_reader.py --help           Show this help message
+        python main.py                  Normal operation (with calibration & protection & LLM)
+        python main.py --test           Test mode (faster readings, 2 second interval)
+        python main.py --calibrate      Run calibration only
+        python main.py --no-protection  Disable overcurrent protection
+        python main.py --no-llm         Disable LLM analysis (faster, no API calls)
+        python main.py --help           Show this help message
 
     Examples:
         # First time setup - calibrate your sensor
-        python sensor_reader.py --calibrate
+        python main.py --calibrate
         
         # Normal monitoring with LLM analysis
-        python sensor_reader.py
+        python main.py
         
         # Quick testing without LLM (faster)
-        python sensor_reader.py --test --no-llm
+        python main.py --test --no-llm
         
         # Monitoring without protection (for testing)
-        python sensor_reader.py --no-protection
+        python main.py --no-protection
     """)
 
 
